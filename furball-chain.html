@@ -1,0 +1,511 @@
+<title>털뭉치 연쇄</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
+<style>
+/* Layout: one-screen night burrow of wriggling furballs. Slim header, jar + narrow info rail side by side, thumb controls underneath on touch. */
+:root {
+  color-scheme: dark;
+  --night: #15112e;
+  --jar: #1f1942;
+  --jar-edge: #3a3070;
+  --ink: #f6eedd;
+  --ink-dim: #a79fc9;
+  --sugar: #ffd35c;
+  --rose: #ff7aa8;
+  --display: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+html, body { height: 100%; }
+body {
+  background: var(--night);
+  background-image: radial-gradient(circle at 20% 10%, #2a2160 0, transparent 45%), radial-gradient(circle at 90% 80%, #2b1848 0, transparent 40%);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 15px;
+  overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+}
+.app {
+  height: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  box-sizing: border-box;
+}
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font-family: var(--display); font-weight: 400; font-size: 26px; margin: 0; color: var(--sugar); letter-spacing: .02em; }
+.score { text-align: right; line-height: 1.1; }
+.score b { font-family: var(--display); font-weight: 400; font-size: 28px; font-variant-numeric: tabular-nums; display: block; }
+.label { font-size: 11px; letter-spacing: .12em; color: var(--ink-dim); }
+.stage { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: flex-start; gap: 12px; }
+.jar { position: relative; border: 2px solid var(--jar-edge); border-radius: 14px; background: var(--jar); overflow: hidden; flex: none; }
+.jar canvas { display: block; touch-action: none; }
+.rail { width: 84px; flex: none; display: flex; flex-direction: column; gap: 14px; }
+.rail > div { display: flex; flex-direction: column; gap: 4px; }
+.rail b { font-family: var(--display); font-weight: 400; font-size: 22px; font-variant-numeric: tabular-nums; }
+#next { background: var(--jar); border: 2px solid var(--jar-edge); border-radius: 12px; display: block; }
+button { font-family: var(--body); color: var(--ink); cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--sugar); outline-offset: 2px; }
+.mini { background: transparent; border: 1px solid var(--jar-edge); border-radius: 999px; padding: 6px 8px; font-size: 12px; }
+.mini:hover { border-color: var(--ink-dim); }
+.overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: 16px; text-align: center; background: rgba(21, 17, 46, .84);
+}
+.overlay h2 { font-family: var(--display); font-weight: 400; font-size: 28px; margin: 0; color: var(--sugar); text-wrap: balance; }
+.overlay p { margin: 0; color: var(--ink); line-height: 1.55; max-width: 24em; font-size: 14px; }
+.overlay .keys { color: var(--ink-dim); font-size: 12.5px; }
+.go { font-family: var(--display); font-size: 20px; background: var(--rose); color: #2a0f1d; border: 0; border-radius: 999px; padding: 10px 30px; }
+.go:hover { filter: brightness(1.08); }
+.chain {
+  position: absolute; left: 0; right: 0; top: 30%; text-align: center; pointer-events: none;
+  font-family: var(--display); font-size: 40px; color: var(--sugar); text-shadow: 0 3px 0 #7a4b00, 0 0 18px rgba(255, 211, 92, .6);
+  opacity: 0;
+}
+.chain.show { animation: chain .9s ease-out; }
+@keyframes chain { 0% { opacity: 0; transform: scale(.5); } 18% { opacity: 1; transform: scale(1.15); } 30% { transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-24px); } }
+.pad { display: none; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.pad button {
+  background: var(--jar); border: 2px solid var(--jar-edge); border-radius: 14px; height: 56px; font-size: 22px;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.pad button:active { background: var(--jar-edge); }
+@media (hover: none), (max-width: 640px) { .pad { display: grid; } }
+@media (prefers-reduced-motion: reduce) { .chain.show { animation-duration: .01s; } }
+</style>
+
+<div class="app">
+  <header>
+    <h1>털뭉치 연쇄</h1>
+    <div class="score"><span class="label">점수</span><b id="score">0</b></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="jar" id="jar">
+      <canvas id="board" aria-label="게임판"></canvas>
+      <div class="chain" id="chain"></div>
+      <div class="overlay" id="overlay">
+        <h2 id="ovTitle">털뭉치 연쇄</h2>
+        <p id="ovText">같은 색 털뭉치를 4마리 이상 이어 붙이면 사라집니다. 빈자리로 위 털뭉치가 떨어져 또 사라지면 연쇄! 가운데 줄이 꼭대기까지 차면 끝나요.</p>
+        <button class="go" id="go">시작</button>
+        <p class="keys" id="ovKeys">← → 이동 · ↑ / X 회전 · Z 반대로 회전<br>↓ 빨리 내리기 · Space 바로 떨어뜨리기 · P 멈춤</p>
+      </div>
+    </div>
+    <div class="rail">
+      <div><span class="label">다음</span><canvas id="next"></canvas></div>
+      <div><span class="label">레벨</span><b id="level">1</b></div>
+      <div><span class="label">최대 연쇄</span><b id="maxChain">0</b></div>
+      <div><span class="label">최고 점수</span><b id="best">0</b></div>
+      <button class="mini" id="pause">멈춤</button>
+      <button class="mini" id="mute">소리 켬</button>
+    </div>
+  </div>
+
+  <div class="pad" id="pad">
+    <button data-act="left" aria-label="왼쪽">←</button>
+    <button data-act="right" aria-label="오른쪽">→</button>
+    <button data-act="ccw" aria-label="반대로 회전">↺</button>
+    <button data-act="cw" aria-label="회전">↻</button>
+    <button data-act="soft" aria-label="빨리 내리기">↓</button>
+    <button data-act="hard" aria-label="바로 떨어뜨리기">⤓</button>
+  </div>
+</div>
+
+<script>
+(() => {
+const W = 7, H = 14, VIS = 13, SPAWN_X = 3;
+const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
+const COL = [
+  ['#ffc2d6', '#ff7aa8', '#d94f7f'],
+  ['#fff0b3', '#ffd35c', '#e0a422'],
+  ['#b9f5e0', '#5fe0b7', '#2fae86'],
+  ['#c2e2ff', '#6cb8ff', '#3b86d6'],
+  ['#e0ccff', '#b68cff', '#8257d6'],
+];
+const $ = id => document.getElementById(id);
+const cv = $('board'), ctx = cv.getContext('2d');
+const nx = $('next'), nctx = nx.getContext('2d');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let cell = 32, dpr = 1;
+let grid, off, cur, next, phase = 'title', paused = false;
+let score = 0, best = 0, popped = 0, level = 1, chain = 0, maxChain = 0;
+let acc = 0, lockT = 0, slides = 0, soft = false, popT = 0, popping = [], parts = [];
+let muted = false, actx = null, T = 0;
+
+try { best = +localStorage.getItem('byeolsatang-best') || 0; } catch (e) {}
+
+const emptyGrid = v => Array.from({ length: H }, () => Array(W).fill(v));
+const colors = () => (level >= 5 ? 5 : 4);
+const rnd = n => Math.floor(Math.random() * n);
+const newPair = () => ({ a: rnd(colors()), b: rnd(colors()) });
+const free = (x, y) => x >= 0 && x < W && y >= 0 && y < H && grid[y][x] < 0;
+const fits = (x, y, r) => free(x, y) && free(x + DX[r], y + DY[r]);
+const canDown = () => fits(cur.x, cur.y + 1, cur.r);
+const interval = () => Math.max(110, 780 - (level - 1) * 65);
+
+function beep(freq, dur, type, vol) {
+  if (muted || !actx) return;
+  try {
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = type || 'triangle'; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol || 0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
+  } catch (e) {}
+}
+
+function hud() {
+  $('score').textContent = score.toLocaleString('ko-KR');
+  $('level').textContent = level;
+  $('maxChain').textContent = maxChain;
+  $('best').textContent = Math.max(best, score).toLocaleString('ko-KR');
+}
+
+function demoGrid() {
+  grid = emptyGrid(-1); off = emptyGrid(0);
+  const rows = ['..1....', '0.12..3', '00122.3', '2011323'];
+  rows.forEach((s, i) => [...s].forEach((ch, x) => { if (ch !== '.') grid[H - rows.length + i][x] = +ch; }));
+}
+
+function newGame() {
+  grid = emptyGrid(-1); off = emptyGrid(0);
+  score = 0; popped = 0; level = 1; chain = 0; maxChain = 0; parts = []; popping = [];
+  next = [newPair(), newPair()];
+  paused = false; hud(); spawn();
+}
+
+function spawn() {
+  if (grid[1][SPAWN_X] >= 0) return gameOver();
+  const p = next.shift(); next.push(newPair());
+  cur = { x: SPAWN_X, y: 1, r: 0, a: p.a, b: p.b };
+  acc = 0; lockT = 0; slides = 0; phase = 'play'; drawNext();
+}
+
+function gameOver() {
+  phase = 'over'; cur = null;
+  if (score > best) { best = score; try { localStorage.setItem('byeolsatang-best', String(best)); } catch (e) {} }
+  beep(196, 0.5, 'sawtooth', 0.08);
+  showOverlay('굴이 가득 찼어요', `점수 ${score.toLocaleString('ko-KR')} · 최대 ${maxChain}연쇄`, '다시 하기');
+}
+
+function nudge() { if (!canDown() && slides < 10) { lockT = 0; slides++; } }
+
+function move(d) {
+  if (phase !== 'play' || paused) return;
+  if (fits(cur.x + d, cur.y, cur.r)) { cur.x += d; nudge(); beep(520, 0.03, 'square', 0.03); }
+}
+
+function tryRot(r) {
+  for (const [kx, ky] of [[0, 0], [-DX[r], -DY[r]]]) {
+    if (fits(cur.x + kx, cur.y + ky, r)) { cur.x += kx; cur.y += ky; cur.r = r; return true; }
+  }
+  return false;
+}
+
+function rotate(d) {
+  if (phase !== 'play' || paused) return;
+  const r = (cur.r + d + 4) % 4;
+  if (tryRot(r) || (DX[r] !== 0 && tryRot((cur.r + 2) % 4))) { nudge(); beep(660, 0.04, 'square', 0.03); }
+}
+
+function hardDrop() {
+  if (phase !== 'play' || paused) return;
+  let n = 0;
+  while (canDown()) { cur.y++; n++; }
+  score += n * 2; place();
+}
+
+function place() {
+  grid[cur.y][cur.x] = cur.a;
+  grid[cur.y + DY[cur.r]][cur.x + DX[cur.r]] = cur.b;
+  cur = null; chain = 0; beep(180, 0.06, 'sine', 0.12);
+  startDrop();
+}
+
+function startDrop() {
+  let moved = false;
+  for (let x = 0; x < W; x++) {
+    let w = H - 1;
+    for (let y = H - 1; y >= 0; y--) {
+      if (grid[y][x] < 0) continue;
+      if (y !== w) {
+        grid[w][x] = grid[y][x]; grid[y][x] = -1;
+        off[w][x] = y - w + off[y][x]; off[y][x] = 0; moved = true;
+      }
+      w--;
+    }
+  }
+  if (moved && !reduced) phase = 'drop';
+  else { off = emptyGrid(0); resolve(); }
+}
+
+function resolve() {
+  const seen = emptyGrid(false), groups = [];
+  for (let y = 1; y < H; y++) for (let x = 0; x < W; x++) {
+    if (grid[y][x] < 0 || seen[y][x]) continue;
+    const c = grid[y][x], g = [], st = [[x, y]];
+    seen[y][x] = true;
+    while (st.length) {
+      const [cx, cy] = st.pop(); g.push([cx, cy]);
+      for (let i = 0; i < 4; i++) {
+        const ax = cx + DX[i], ay = cy + DY[i];
+        if (ax >= 0 && ax < W && ay >= 1 && ay < H && !seen[ay][ax] && grid[ay][ax] === c) { seen[ay][ax] = true; st.push([ax, ay]); }
+      }
+    }
+    if (g.length >= 4) groups.push(g);
+  }
+  if (!groups.length) { hud(); return spawn(); }
+  chain++; maxChain = Math.max(maxChain, chain);
+  popping = groups.flat();
+  const n = popping.length;
+  const mult = (chain === 1 ? 1 : chain * chain * 2) + (n - 4) * 2 + (groups.length - 1) * 3;
+  score += n * 10 * mult; popped += n; level = 1 + Math.floor(popped / 24);
+  hud();
+  if (chain >= 2) {
+    const el = $('chain'); el.textContent = chain + '연쇄!';
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  }
+  beep(392 * Math.pow(2, (chain - 1) * 2 / 12), 0.25, 'triangle', 0.16);
+  phase = 'pop'; popT = 0;
+}
+
+function finishPop() {
+  for (const [x, y] of popping) {
+    const c = grid[y][x];
+    if (!reduced) for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2, v = 0.06 + Math.random() * 0.12;
+      parts.push({ x: x + 0.5, y: y - 0.5, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.08, life: 1, c });
+    }
+    grid[y][x] = -1;
+  }
+  popping = []; startDrop();
+}
+
+function update(dt) {
+  for (const p of parts) { p.x += p.vx * dt / 16; p.y += p.vy * dt / 16; p.vy += 0.008 * dt / 16; p.life -= dt / 520; }
+  parts = parts.filter(p => p.life > 0);
+  if (paused) return;
+  if (phase === 'play') {
+    if (canDown()) {
+      lockT = 0; acc += dt;
+      const iv = soft ? Math.min(45, interval()) : interval();
+      while (acc >= iv) {
+        cur.y++; acc -= iv; slides = 0;
+        if (soft) score++;
+        if (!canDown()) { acc = 0; break; }
+      }
+      if (soft) hud();
+    } else {
+      acc = 0; lockT += dt;
+      if (lockT >= (soft ? 110 : 450)) place();
+    }
+  } else if (phase === 'drop') {
+    let busy = false;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (off[y][x] < 0) {
+      off[y][x] = Math.min(0, off[y][x] + dt * 0.024);
+      if (off[y][x] < 0) busy = true;
+    }
+    if (!busy) resolve();
+  } else if (phase === 'pop') {
+    popT += dt;
+    if (popT >= 380) finishPop();
+  }
+}
+
+// 털뭉치: 둥글거나 네모난 몸통 둘레로 털이 삐죽삐죽 흔들린다. wig = 꿈틀거림 세기 (0 정지, 1 떨어지는 중)
+const BODY = [2.2, 6, 2.2, 6, 3.2];
+function candy(g, c, cx, cy, r, scale, alpha, flash, wig) {
+  wig = wig || 0;
+  const ph = c * 1.3 + cx * 0.05, s = Math.sin(T * 0.008 + ph) * wig;
+  const rx = r * 0.9 * (1 + 0.08 * s), ry = r * 0.9 * (1 - 0.08 * s), e = 2 / BODY[c], N = 44;
+  const pt = (i, f) => {
+    const a = i / N * Math.PI * 2 + Math.sin(T * 0.006 + ph) * 0.05 * wig, co = Math.cos(a), si = Math.sin(a);
+    return [Math.sign(co) * Math.pow(Math.abs(co), e) * rx * f, Math.sign(si) * Math.pow(Math.abs(si), e) * ry * f];
+  };
+  g.save(); g.translate(cx, cy); g.scale(scale, scale); g.globalAlpha = alpha;
+  const gr = g.createLinearGradient(0, -r, 0, r);
+  gr.addColorStop(0, COL[c][0]); gr.addColorStop(0.5, COL[c][1]); gr.addColorStop(1, COL[c][2]);
+  g.fillStyle = flash ? '#ffffff' : gr; g.lineJoin = 'round';
+  g.beginPath();
+  for (let i = 0; i < N; i++) {
+    const tip = i % 2 === 0, f = tip ? 1.08 + 0.09 * Math.sin(T * 0.013 + i * 2.3 + ph) * (0.3 + wig) : 0.8;
+    const [x, y] = pt(i, f); i ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  g.closePath(); g.fill();
+  if (c === 2 || c === 3) {
+    const sw = Math.sin(T * 0.011 + ph) * r * 0.1 * (0.3 + wig);
+    for (const d of c === 2 ? [-1, 1] : [0]) {
+      g.beginPath(); g.moveTo(d * rx * 0.62 - r * 0.2, -ry * 0.72); g.lineTo(d * rx * 0.68 + sw, -ry * 1.22); g.lineTo(d * rx * 0.62 + r * 0.2, -ry * 0.72); g.closePath(); g.fill();
+    }
+  }
+  if (!flash) {
+    const dot = (x, y, q) => { g.beginPath(); g.arc(x, y, q, 0, 7); g.fill(); };
+    if (c === 4) { g.fillStyle = 'rgba(255,255,255,.4)'; g.beginPath(); g.ellipse(0, ry * 0.42, rx * 0.4, ry * 0.26, 0, 0, 7); g.fill(); }
+    const ey = -ry * 0.12, ex = rx * 0.3;
+    g.fillStyle = '#ffffff'; dot(-ex, ey, r * 0.17); dot(ex, ey, r * 0.17);
+    g.fillStyle = '#1b1438'; dot(-ex + s * r * 0.03, ey + r * 0.03, r * 0.09); dot(ex + s * r * 0.03, ey + r * 0.03, r * 0.09);
+  }
+  g.restore();
+}
+
+function draw() {
+  const R = cell * 0.44, px = x => (x + 0.5) * cell, py = y => (y - 0.5) * cell;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W * cell, VIS * cell);
+  ctx.fillStyle = 'rgba(255,255,255,.07)';
+  for (let y = 1; y < H; y++) for (let x = 0; x < W; x++) { ctx.beginPath(); ctx.arc(px(x), py(y), 1.4, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(255,122,168,.55)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  const mx = px(SPAWN_X), my = py(1), m = cell * 0.16;
+  ctx.beginPath(); ctx.moveTo(mx - m, my - m); ctx.lineTo(mx + m, my + m); ctx.moveTo(mx + m, my - m); ctx.lineTo(mx - m, my + m); ctx.stroke();
+
+  const popSet = new Set(popping.map(([x, y]) => y * W + x)), t = popT / 380;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const c = grid[y][x]; if (c < 0) continue;
+    if (popSet.has(y * W + x)) candy(ctx, c, px(x), py(y), R, 1 + 0.25 * t, 1 - t * t, Math.floor(popT / 70) % 2 === 0);
+    else candy(ctx, c, px(x), py(y + off[y][x]), R, 1, 1, false, off[y][x] < 0 ? 1 : 0.4);
+  }
+  if (cur && phase === 'play') {
+    const cells = [[cur.x, cur.y, cur.a], [cur.x + DX[cur.r], cur.y + DY[cur.r], cur.b]].sort((p, q) => q[1] - p[1]);
+    const depth = {};
+    for (const [x, y, c] of cells) {
+      let gy = y; while (gy + 1 < H && grid[gy + 1][x] < 0) gy++;
+      gy -= depth[x] || 0; depth[x] = (depth[x] || 0) + 1;
+      ctx.globalAlpha = 0.5; ctx.fillStyle = COL[c][1];
+      ctx.beginPath(); ctx.arc(px(x), py(gy), cell * 0.12, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+    }
+    const sub = canDown() && !reduced ? Math.min(1, acc / interval()) : 0;
+    for (const [x, y, c] of cells) candy(ctx, c, px(x), py(y + sub), R, 1, 1, false, 1);
+    ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(px(cur.x), py(cur.y + sub), R * 1.08, 0, 7); ctx.stroke();
+  }
+  for (const p of parts) {
+    ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = COL[p.c][0];
+    ctx.beginPath(); ctx.arc(p.x * cell, p.y * cell, cell * 0.09 * p.life + 1, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawNext() {
+  const s = 24, w = 80, h = 132;
+  nx.width = w * dpr; nx.height = h * dpr; nx.style.width = w + 'px'; nx.style.height = h + 'px';
+  nctx.setTransform(dpr, 0, 0, dpr, 0, 0); nctx.clearRect(0, 0, w, h);
+  (next || [{ a: 0, b: 1 }, { a: 2, b: 3 }]).forEach((p, i) => {
+    const y0 = 20 + i * 62, sc = i ? 0.8 : 1;
+    candy(nctx, p.b, w / 2, y0, s * 0.44, sc, i ? 0.7 : 1, false);
+    candy(nctx, p.a, w / 2, y0 + s * sc, s * 0.44, sc, i ? 0.7 : 1, false);
+  });
+}
+
+function resize() {
+  const st = $('stage');
+  const availH = st.clientHeight > 200 ? st.clientHeight - 4 : 520;
+  const availW = st.clientWidth - 84 - 12 - 4;
+  cell = Math.max(16, Math.min(46, Math.floor(Math.min(availW / W, availH / VIS))));
+  dpr = Math.min(3, window.devicePixelRatio || 1);
+  cv.width = W * cell * dpr; cv.height = VIS * cell * dpr;
+  cv.style.width = W * cell + 'px'; cv.style.height = VIS * cell + 'px';
+  drawNext(); draw();
+}
+
+function showOverlay(title, text, btn) {
+  $('ovTitle').textContent = title; $('ovText').textContent = text; $('go').textContent = btn;
+  $('ovKeys').hidden = phase === 'over';
+  $('overlay').hidden = false;
+}
+
+function go() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  $('overlay').hidden = true;
+  if (paused) { paused = false; return; }
+  newGame();
+}
+
+function togglePause() {
+  if (phase === 'title' || phase === 'over') return;
+  if (paused) return go();
+  paused = true; soft = false;
+  showOverlay('잠시 멈춤', '털뭉치들은 제자리에서 꼬물거리며 기다려요.', '계속');
+}
+
+addEventListener('keydown', e => {
+  const k = e.key;
+  if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', ' '].includes(k)) e.preventDefault();
+  if (k === 'Enter' && !$('overlay').hidden) return go();
+  if (k === 'p' || k === 'P' || k === 'ㅔ' || k === 'Escape') { if (!e.repeat) togglePause(); return; }
+  if (k === 'ArrowLeft') move(-1);
+  else if (k === 'ArrowRight') move(1);
+  else if (k === 'ArrowDown') soft = true;
+  else if (e.repeat) return;
+  else if (k === 'ArrowUp' || k === 'x' || k === 'X' || k === 'ㅌ') rotate(1);
+  else if (k === 'z' || k === 'Z' || k === 'ㅋ') rotate(-1);
+  else if (k === ' ') { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); hardDrop(); }
+});
+addEventListener('keyup', e => { if (e.key === 'ArrowDown') soft = false; });
+addEventListener('blur', () => { soft = false; });
+document.addEventListener('visibilitychange', () => { if (document.hidden && phase !== 'title' && phase !== 'over' && !paused) togglePause(); });
+
+$('go').addEventListener('click', go);
+$('pause').addEventListener('click', e => { e.currentTarget.blur(); togglePause(); });
+$('mute').addEventListener('click', e => { muted = !muted; e.currentTarget.textContent = muted ? '소리 끔' : '소리 켬'; e.currentTarget.blur(); });
+
+const acts = { left: () => move(-1), right: () => move(1), cw: () => rotate(1), ccw: () => rotate(-1), hard: hardDrop };
+for (const b of document.querySelectorAll('#pad button')) {
+  const act = b.dataset.act; let timer = 0, rep = 0;
+  const stop = () => { clearTimeout(timer); clearInterval(rep); if (act === 'soft') soft = false; };
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault(); stop();
+    if (act === 'soft') { soft = true; return; }
+    acts[act]();
+    if (act === 'left' || act === 'right') timer = setTimeout(() => { rep = setInterval(acts[act], 90); }, 220);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, stop);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+}
+
+let gs = null;
+cv.addEventListener('pointerdown', e => { gs = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false }; });
+cv.addEventListener('pointermove', e => {
+  if (!gs) return;
+  const dx = e.clientX - gs.x;
+  if (Math.abs(dx) >= cell * 0.8) { move(Math.sign(dx)); gs.x = e.clientX; gs.moved = true; }
+});
+cv.addEventListener('pointerup', e => {
+  if (!gs) return;
+  const dy = e.clientY - gs.y, quick = performance.now() - gs.t < 350;
+  if (!gs.moved && dy > cell * 2 && quick) hardDrop();
+  else if (!gs.moved && Math.abs(dy) < cell * 0.5 && quick) rotate(1);
+  gs = null;
+});
+cv.addEventListener('pointercancel', () => { gs = null; });
+
+addEventListener('resize', resize);
+if (window.ResizeObserver) new ResizeObserver(resize).observe($('stage'));
+
+function start(data) {
+  demoGrid();
+  if (data && data.grid) {
+    grid = data.grid; off = emptyGrid(0); score = data.score; popped = data.popped; level = data.level; maxChain = data.maxChain;
+    next = data.next; cur = null; chain = 0; phase = 'drop'; paused = true;
+    showOverlay('잠시 멈춤', '페이지가 새로 고쳐졌어요. 쌓은 털뭉치는 그대로예요.', '계속');
+  }
+  hud(); resize();
+  let last = performance.now();
+  (function loop(now) {
+    const dt = Math.min(50, now - last); last = now; if (!reduced) T = now;
+    update(dt); draw(); requestAnimationFrame(loop);
+  })(last);
+}
+
+const hot = window.claude && window.claude.hot;
+if (hot && hot.snapshot) hot.snapshot(() => {
+  if (phase === 'title' || phase === 'over') return {};
+  const g = grid.map(r => r.slice());
+  for (const [x, y] of popping) g[y][x] = -1;
+  return { grid: g, score, popped, level, maxChain, next: cur ? [{ a: cur.a, b: cur.b }, next[0]] : next };
+});
+if (hot && hot.ready) hot.ready(start); else start((hot && hot.data) || {});
+})();
+</script>
