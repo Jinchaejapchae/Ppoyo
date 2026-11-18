@@ -1,5 +1,10 @@
-<title>털뭉치 연쇄</title>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
+<title>털뭉치 연쇄</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
 <style>
 /* Layout: one-screen night burrow of wriggling furballs. Slim header, jar + narrow info rail side by side, thumb controls underneath on touch. */
@@ -15,7 +20,8 @@
   --display: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
-html, body { height: 100%; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
 body {
   background: var(--night);
   background-image: radial-gradient(circle at 20% 10%, #2a2160 0, transparent 45%), radial-gradient(circle at 90% 80%, #2b1848 0, transparent 40%);
@@ -76,6 +82,8 @@ button:focus-visible { outline: 2px solid var(--sugar); outline-offset: 2px; }
 @media (hover: none), (max-width: 640px) { .pad { display: grid; } }
 @media (prefers-reduced-motion: reduce) { .chain.show { animation-duration: .01s; } }
 </style>
+</head>
+<body>
 
 <div class="app">
   <header>
@@ -145,6 +153,7 @@ const newPair = () => ({ a: rnd(colors()), b: rnd(colors()) });
 const free = (x, y) => x >= 0 && x < W && y >= 0 && y < H && grid[y][x] < 0;
 const fits = (x, y, r) => free(x, y) && free(x + DX[r], y + DY[r]);
 const canDown = () => fits(cur.x, cur.y + 1, cur.r);
+const botY = () => Math.max(cur.y, cur.y + DY[cur.r]);
 const interval = () => Math.max(110, 780 - (level - 1) * 65);
 
 function beep(freq, dur, type, vol) {
@@ -180,7 +189,7 @@ function newGame() {
 function spawn() {
   if (grid[1][SPAWN_X] >= 0) return gameOver();
   const p = next.shift(); next.push(newPair());
-  cur = { x: SPAWN_X, y: 1, r: 0, a: p.a, b: p.b };
+  cur = { x: SPAWN_X, y: 1, r: 0, a: p.a, b: p.b, maxY: 1 };
   acc = 0; lockT = 0; slides = 0; phase = 'play'; drawNext();
 }
 
@@ -191,7 +200,7 @@ function gameOver() {
   showOverlay('굴이 가득 찼어요', `점수 ${score.toLocaleString('ko-KR')} · 최대 ${maxChain}연쇄`, '다시 하기');
 }
 
-function nudge() { if (!canDown() && slides < 10) { lockT = 0; slides++; } }
+function nudge() { if ((!canDown() || botY() < cur.maxY) && slides < 10) { lockT = 0; slides++; } }
 
 function move(d) {
   if (phase !== 'play' || paused) return;
@@ -200,6 +209,7 @@ function move(d) {
 
 function tryRot(r) {
   for (const [kx, ky] of [[0, 0], [-DX[r], -DY[r]]]) {
+    if (ky < 0 && slides >= 10) continue;
     if (fits(cur.x + kx, cur.y + ky, r)) { cur.x += kx; cur.y += ky; cur.r = r; return true; }
   }
   return false;
@@ -214,7 +224,7 @@ function rotate(d) {
 function hardDrop() {
   if (phase !== 'play' || paused) return;
   let n = 0;
-  while (canDown()) { cur.y++; n++; }
+  while (canDown()) { cur.y++; if (botY() > cur.maxY) { cur.maxY = botY(); n++; } }
   score += n * 2; place();
 }
 
@@ -290,11 +300,12 @@ function update(dt) {
   if (paused) return;
   if (phase === 'play') {
     if (canDown()) {
-      lockT = 0; acc += dt;
+      if (botY() >= cur.maxY) lockT = 0;
+      acc += dt;
       const iv = soft ? Math.min(45, interval()) : interval();
       while (acc >= iv) {
-        cur.y++; acc -= iv; slides = 0;
-        if (soft) score++;
+        cur.y++; acc -= iv;
+        if (botY() > cur.maxY) { cur.maxY = botY(); slides = 0; lockT = 0; if (soft) score++; }
         if (!canDown()) { acc = 0; break; }
       }
       if (soft) hud();
@@ -418,6 +429,7 @@ function showOverlay(title, text, btn) {
 
 function go() {
   if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (actx && actx.state === 'suspended') { try { actx.resume(); } catch (e) {} }
   $('overlay').hidden = true;
   if (paused) { paused = false; return; }
   newGame();
@@ -509,3 +521,5 @@ if (hot && hot.snapshot) hot.snapshot(() => {
 if (hot && hot.ready) hot.ready(start); else start((hot && hot.data) || {});
 })();
 </script>
+</body>
+</html>
